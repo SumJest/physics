@@ -45,7 +45,7 @@ class Vector:
         return Vector.multiply(self, 1 / other)
 
     def __abs__(self):
-        return math.sqrt(self.direction[0] ** 2 + self.direction[1] ** 2)
+        return math.hypot(self.direction[0], self.direction[1])
 
     def __repr__(self):
         return f"({self.__abs__()}, {self.direction})"
@@ -56,7 +56,11 @@ class Vector:
         :param length: new length
         :return: None
         """
-        self.multiply(self, length / self.__abs__())
+        if abs(self) == 0:
+            self.direction = [length * math.cos(math.radians(0)), length * math.sin(math.radians(0))]
+        else:
+            self.direction = (self * length / abs(self)).direction
+        return self
 
 
 class Force(Vector):
@@ -75,19 +79,29 @@ class Force(Vector):
 
 class PhysicObject:
     weight: float
-    forces: typing.List[Force]
+    forces: typing.Dict[str, Force]
     id: int = -1
     velocity: Vector
+    direction: float
 
-    def __init__(self, weight: float, forces: typing.Union[typing.List[Force], None],
-                 velocity: typing.Union[Vector, None]):
-        self.forces = []
+    def __init__(self, weight: float, forces: typing.Union[typing.Dict[str, Force], None],
+                 velocity: typing.Union[Vector, None], direction: float = 0):
+        self.forces = {}
         self.velocity = Vector(0, 0)
         self.weight = weight
+        self.direction = direction
         if forces is not None:
             self.forces = forces
         if velocity is not None:
             self.velocity = velocity
+
+    def getresultant(self) -> Force:
+        resultant = Force(10, 10, corner=0, length=0)
+        if len(self.forces.keys()) == 0:
+            return resultant
+        for force in self.forces.keys():
+            resultant += self.forces[force]
+        return resultant
 
 
 class Body(PhysicObject):
@@ -97,21 +111,29 @@ class Body(PhysicObject):
     size_y: float
     color: str
     collision: bool = True
+    text: int
 
-    def __init__(self, x: float, y: float, size_x: float, size_y: float, color: str,
-                 weight: float, forces: typing.Union[typing.List[Force], None], velocity: typing.Union[Vector, None]):
+    def __init__(self, x: float, y: float, size_x: float, size_y: float, color: str, weight: float,
+                 forces: typing.Union[typing.Dict[str, Force], None], velocity: typing.Union[Vector, None],
+                 direction: float = 0, text: int = -1):
+        self.text = text
+        self.direction = direction
         self.color = color
         self.size_y = size_y
         self.size_x = size_x
         self.y = y
         self.x = x
-        self.forces = []
+        self.forces = {}
         self.velocity = Vector(0, 0)
         self.weight = weight
         if forces is not None:
             self.forces = forces
         if velocity is not None:
             self.velocity = velocity
+
+    def move(self, time: float):
+        self.x += self.velocity.direction[0] * time
+        self.y += self.velocity.direction[1] * time
 
 
 class Wall(PhysicObject):
@@ -123,13 +145,13 @@ class Wall(PhysicObject):
     collision: bool = True
 
     def __init__(self, x1: float, y1: float, x2: float, y2: float, color: str,
-                 forces: typing.Union[typing.List[Force], None] = None):
+                 forces: typing.Union[typing.Dict[str, Force], None] = None):
         self.color = color
         self.x1 = x1
         self.y1 = y1
         self.x2 = x2
         self.y2 = y2
-        self.forces = []
+        self.forces = {}
         if forces is not None:
             self.forces = forces
 
@@ -151,13 +173,28 @@ class Line:
 
 class String(PhysicObject):
     lines: typing.List[Line]
-    tension: Force
+    tension: float
     tied_ids: typing.List[int]
 
-    def __init__(self, lines: typing.List[Line], tension: Force, tied_ids: typing.List[int],  weight: float,
-                 forces: typing.Union[typing.List[Force], None],
+    def __init__(self, lines: typing.List[Line], tension: float, tied_ids: typing.List[int], weight: float,
+                 forces: typing.Union[typing.Dict[str, Force], None],
                  velocity: typing.Union[Vector, None]):
         super().__init__(weight, forces, velocity)
         self.tied_ids = tied_ids
         self.lines = lines
         self.tension = tension
+
+    def move(self, time: float):
+        for line in self.lines:
+            line.x1 += line.curve.direction[0] * self.velocity.direction[0] * time
+            line.y1 += line.curve.direction[1] * self.velocity.direction[1] * time
+
+
+class Cursor:
+    x: float
+    y: float
+    id: int = -1
+
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y

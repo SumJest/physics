@@ -10,17 +10,15 @@ class Cons:
     BOARD_HEIGHT = 800
     DELAY = 1
     colors = ["green", "blue"]
-    gravity = 0
-    G = 10
 
 
 class Board(Canvas):
     bodies: typing.List[typing.Union[Body, Wall, String]]
-    start_time: float
     last_time: float
     is_pause: bool = False
     cursor: Cursor
-    acceleration: float
+    acceleration: Vector
+    start_time: float
     text_timer: int
 
     def __init__(self):
@@ -36,36 +34,39 @@ class Board(Canvas):
 
     def doPhysic(self):
         time_now = datetime.now().timestamp()
-        self.acceleration = (abs(self.bodies[2].getresultant()) - abs(self.bodies[1].getresultant()) - abs(self.bodies[0].getresultant())) / \
-                            (self.bodies[2].weight + self.bodies[1].weight + self.bodies[0].weight)
         for body in self.bodies:
             if type(body) == Body:
                 body.move(time_now - self.last_time)
-                body.velocity += Vector(length=self.acceleration * (time_now - self.last_time), corner=body.direction)
-
-                body.forces["gravity"] = Force(10, 10, Cons.G * body.weight, 90)
-            # if type(body) == String:
-            #     body.tension = self.bodies[body.tied_ids[0]].weight * (self.acceleration + Cons.G)
-            #     for
-
+                resultant = body.getresultant()
+                body.velocity += resultant / body.weight
 
     def draw(self):
         for body in self.bodies:
 
             if body.id == -1:
                 if type(body) == Body:
-                    body.id = self.create_rectangle(body.x, body.y, body.x + body.size_x, body.y + body.size_y,
+                    body.id = self.create_oval(body.x, body.y, body.x + body.size_x, body.y + body.size_y,
                                                     fill=body.color, tags="body")
+                    body.text = self.create_text(body.x - 5, body.y - 5, text=f"{abs(body.velocity)} м/c")
+
                 elif type(body) == Wall:
                     body.id = self.create_line(body.x1, body.y1, body.x2, body.y2,
                                                fill=body.color, tags="body")
-                # elif type(body) == String:
-                #     for line in body.lines:
-                #         self.create_line(line.x0, line.y0, line.x1, line.y1, fill="black")
+                elif type(body) == String:
+                    for line in body.lines:
+                        self.create_line(line.x0, line.y0, line.x1, line.y1, fill="black")
             else:
 
                 if type(body) == Body:
+
                     self.moveto(body.id, body.x, body.y)
+                    self.itemconfig(body.text, text=f"{abs(body.velocity)} м/c")
+
+                    self.moveto(body.text, body.x - 5, body.y - 15)
+                    # self.draw_vector(body.velocity, body.x + body.size_x // 2, body.y + body.size_y // 2,
+                    #                  fill=body.color)
+                    # self.draw_vector(body.getresultant() * 5, body.x + body.size_x // 2, body.y + body.size_y // 2,
+                    #                  fill="red")
 
         if self.cursor.id == -1:
             self.cursor.id = self.create_text(self.cursor.x, self.cursor.y, text=f"({self.cursor.x}, {self.cursor.y})")
@@ -94,18 +95,24 @@ class Board(Canvas):
         v2 = (2 * abs(self.bodies[body1].velocity) * self.bodies[body1].weight + abs(self.bodies[body2].velocity) * (
                 self.bodies[body2].weight - self.bodies[body1].weight)) / (
                      self.bodies[body1].weight + self.bodies[body2].weight)
+
         vb1 = self.bodies[body1].velocity
         vb2 = self.bodies[body2].velocity
         # self.draw_vector(self.bodys[body1].velocity, 100, 200, fill=self.bodys[body1].color)
         # self.draw_vector(self.bodys[body2].velocity, 100, 200, fill=self.bodys[body2].color)
-        n1 = Vector(
-            direction=[self.bodies[body1].x - self.bodies[body2].x, self.bodies[body1].y - self.bodies[body2].y])
-        n2 = Vector(
-            direction=[self.bodies[body2].x - self.bodies[body1].x, self.bodies[body2].y - self.bodies[body1].y])
-        self.bodies[body1].velocity = (vb1 - (n1 * 2) * ((vb1 * n1) / (n1 * n1)))
-        self.bodies[body2].velocity = (vb2 - (n2 * 2) * ((vb2 * n2) / (n2 * n2)))
-        self.bodies[body1].velocity.len(v1)
-        self.bodies[body2].velocity.len(v2)
+        if abs(vb1) == 0:
+            self.bodies[body1].velocity = vb2
+        elif abs(vb2) == 0:
+            self.bodies[body2].velocity = vb1
+        else:
+            n1 = Vector(
+                direction=[self.bodies[body1].x - self.bodies[body2].x, self.bodies[body1].y - self.bodies[body2].y])
+            n2 = Vector(
+                direction=[self.bodies[body2].x - self.bodies[body1].x, self.bodies[body2].y - self.bodies[body1].y])
+            self.bodies[body1].velocity = (vb1 - (n1 * 2) * ((vb1 * n1) / (n1 * n1)))
+            self.bodies[body2].velocity = (vb2 - (n2 * 2) * ((vb2 * n2) / (n2 * n2)))
+        self.bodies[body1].velocity *= v1 / abs(self.bodies[body1].velocity)
+        self.bodies[body1].velocity *= v2 / abs(self.bodies[body2].velocity)
         # self.draw_vector(self.bodies[body1].velocity, self.bodies[body1].x + 10, self.bodies[body1].y + 10,
         #                  fill=self.bodies[body1].color)
         # self.draw_vector(self.bodies[body2].velocity, self.bodies[body2].x + 10, self.bodies[body2].y + 10,
@@ -114,8 +121,9 @@ class Board(Canvas):
         self.bodies[body1].collision = False
 
         self.bodies[body2].collision = False
-        self.after(100, self.turn_on_coolision, body1)
-        self.after(100, self.turn_on_coolision, body2)
+
+        self.after(500, self.turn_on_coolision, body1)
+        self.after(500, self.turn_on_coolision, body2)
         pass
 
     def makeCollisionWithWall(self, b: int, w: int):
@@ -148,33 +156,7 @@ class Board(Canvas):
                 if type(body) != Body:
                     continue
                 if type(self.bodies[self.getBodyIById(ovr)]) == Wall:
-                    wall = self.bodies[self.getBodyIById(ovr)]
-                    n = Vector(direction=[wall.y1 - wall.y2, wall.x2 - wall.x1])
-
-                    v1 = (body.velocity * n) / abs(n)
-
-                    n *= v1 / abs(n)
-
-                    # self.draw_vector(n, body.x, body.y, fill="blue")
-                    # self.makeCollisionWithWall(body.id, ovr)
-
-                    body.velocity -= n
-
-                    # if len(body.forces) < 4:
-                    #     body.forces.append(body.forces[0] * -1)
-                    #     f = Force(10, 10, direction=(body.velocity * -1).direction)
-                    #     f.len(abs(body.forces[1]) * 0.1)
-                    #     body.forces.append(f)
-                    #     body.forces.append(f*5)
-                    # else:
-                    body.forces["normal"] = body.forces["gravity"] * -1
-                    f = Force(10, 10, direction=(body.velocity * -1).direction)
-                    # f.len(abs(body.forces[1]) * 0.1)
-                    if abs(f) != 0:
-                        f *= abs(body.forces["normal"] * 0.1) / abs(f)
-
-                    body.forces["friction"] = f
-                    continue
+                    self.makeCollisionWithWall(body.id, ovr)
                 if type(self.bodies[self.getBodyIById(ovr)]) == Body:
                     self.mkcollision(body.id, ovr)
                     collisions.append({body.id, ovr})
@@ -182,18 +164,13 @@ class Board(Canvas):
     def onMotion(self, event):
         self.cursor.x, self.cursor.y = event.x, event.y
 
-    def pause(self):
-        self.is_pause = not self.is_pause
-        print(1)
-
-    def reset_timer(self):
-        self.start_time = self.last_time
-
     def onTimer(self):
         if not self.is_pause:
 
             self.delete("vector")
+
             self.draw()
+
             self.doPhysic()
             self.checkCollisions()
         else:
@@ -202,9 +179,14 @@ class Board(Canvas):
 
 
 
-
         self.after(Cons.DELAY, self.onTimer)
             # self.is_pause = True
+
+    def pause(self):
+        self.is_pause = not self.is_pause
+
+    def reset_timer(self):
+        self.start_time = self.last_time
 
     def initSim(self):
         self.bodies = []
@@ -218,31 +200,16 @@ class Board(Canvas):
 
         self.create_window((160,  Cons.BOARD_HEIGHT), anchor="sw", window=ButtonPause)
         self.create_window((60, Cons.BOARD_HEIGHT), anchor="sw", window=ButtonReset)
-
-        self.bodies.append(Body(350, 280, 50, 20, "#1f1", 4,
+        self.bodies.append(Body(350, 280, 10, 10, "#1f1", 4,
                                 forces={},
-                                velocity=Vector(0, 0),
-                                direction=0))
-
-        self.bodies.append(Body(300, 700, 10, 10, "red", 1,
+                                velocity=Vector(100, -45)))
+        self.bodies.append(Body(500, 280, 10, 10, "#1ff", 100,
                                 forces={},
-                                velocity=None,
-                                direction=-90))
-        self.bodies.append(Body(700, 350, 14, 14, "red", 2,
-                                forces={},
-                                velocity=None,
-                                direction=90))
-        self.bodies.append(Wall(300, 300, 700, 300, "black"))
-
-        # self.bodies.append(Wall(300, 300, 300, 100, "black"))
-        # self.bodies.append(Wall(700, 300, 700, 100, "black"))
-        # self.bodys.append(Body(237, 209, 20, 20, "#1ff", 1, forces=[], velocity=Vector(0, 120)))
-        # v1 = Vector(50, 80)
-        # v2 = Vector(100, 120)
-        #
-        # self.draw_vector(v1, 200, 200, "#1f1")
-        # self.draw_vector(v2, 200 + v1.direction[0] - v2.direction[0], 200 + v1.direction[1] - v2.direction[1], "#1ff")
-        # self.draw_vector(v1 - (v2 * 2) * ((v1 * v2) / (v2 * v2)), 200 + v1.direction[0],  200 + v1.direction[1], "#f1f")
+                                velocity=Vector(100, -135)))
+        self.bodies.append(Wall(1, 0, Cons.BOARD_WIDTH, 0, "black"))
+        self.bodies.append(Wall(1, 0, 0, Cons.BOARD_HEIGHT, "black"))
+        self.bodies.append(Wall(Cons.BOARD_WIDTH-1, Cons.BOARD_HEIGHT, Cons.BOARD_WIDTH-1, 0, "black"))
+        self.bodies.append(Wall(Cons.BOARD_WIDTH, Cons.BOARD_HEIGHT-1, 0, Cons.BOARD_HEIGHT-1, "black"))
         self.bind("<Motion>", self.onMotion)
         self.cursor = Cursor(0, 0)
         self.after(Cons.DELAY, self.onTimer)
@@ -262,4 +229,3 @@ def main():
     ex = Example()
     root.geometry(f"{Cons.BOARD_WIDTH}x{Cons.BOARD_HEIGHT}")
     root.mainloop()
-
